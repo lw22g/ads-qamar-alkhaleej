@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام تمويل الإعلانات - قمر الخليج</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <style>
+        /* المتغيرات الافتراضية (الوضع الليلي الكحلي) */
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            --glass-bg: rgba(16, 33, 65, 0.45);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            
+            --text-main: #F8FAFC;
+            --text-muted: #CBD5E1;
+            
+            --input-bg: rgba(255, 255, 255, 0.05);
+            --input-border: rgba(255, 255, 255, 0.2);
+            --input-text: #ffffff;
+            --calendar-icon: invert(1);
+            
+            --table-header: rgba(0, 0, 0, 0.2);
+            --table-hover: rgba(255, 255, 255, 0.05);
+
+            --accent: #F59E0B; 
+            --success: #10B981;
+            --danger: #EF4444;
+            --primary-btn: #3B82F6;
+        }
+
+        /* متغيرات الوضع النهاري (Light Mode) */
+        body.light-mode {
+            --bg-gradient: linear-gradient(135deg, #f1f5f9, #e2e8f0, #cbd5e1);
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.5);
+            --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+            
+            --text-main: #1e293b;
+            --text-muted: #475569;
+            
+            --input-bg: rgba(255, 255, 255, 0.9);
+            --input-border: rgba(0, 0, 0, 0.15);
+            --input-text: #1e293b;
+            --calendar-icon: invert(0);
+            
+            --table-header: rgba(0, 0, 0, 0.05);
+            --table-hover: rgba(0, 0, 0, 0.03);
+            
+            --primary-btn: #2563EB;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            transition: background 0.5s ease, color 0.5s ease;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .header { text-align: center; flex-grow: 1; }
+        .header h1 { margin: 0; font-size: 32px; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header p { color: var(--text-muted); margin-top: 5px; font-size: 16px; }
+
+        .theme-btn {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-family: 'Cairo', sans-serif;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(8px);
+            transition: 0.3s;
+        }
+        .theme-btn:hover { background: var(--table-hover); }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            box-shadow: var(--glass-shadow);
+            padding: 25px;
+            margin-bottom: 25px;
+            transition: 0.3s;
+        }
+
+        .dashboard-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+        .card { text-align: center; padding: 20px; }
+        .card h3 { margin: 0; font-size: 15px; color: var(--text-muted); font-weight: 600; }
+        .card .amount { font-size: 28px; font-weight: 700; margin-top: 10px; color: var(--text-main); }
+        .card.accent .amount { color: var(--accent); }
+
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .form-group { display: flex; flex-direction: column; }
+        label { margin-bottom: 6px; font-weight: 600; font-size: 14px; color: var(--text-main); }
+        
+        input {
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            color: var(--input-text);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: 0.3s;
+            box-sizing: border-box;
+        }
+        input:focus { outline: none; border-color: var(--primary-btn); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); }
+        input:disabled { opacity: 0.5; cursor: not-allowed; }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: var(--calendar-icon); cursor: pointer; }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: rgba(16, 185, 129, 0.1);
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .checkbox-group input { width: 18px; height: 18px; cursor: pointer; }
+        .checkbox-group label { margin: 0; color: var(--success); cursor: pointer; font-size: 15px; }
+
+        .btn { padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 15px; transition: 0.3s; color: white; }
+        .btn-primary { background: var(--primary-btn); width: 100%; }
+        .btn-primary:hover { filter: brightness(1.1); }
+        .btn-export { background: var(--success); margin-bottom: 15px; }
+        .btn-export:hover { filter: brightness(1.1); }
+        .btn-action { padding: 6px 12px; border-radius: 6px; font-size: 13px; margin: 0 2px; }
+        .btn-edit { background: #F59E0B; }
+        .btn-danger { background: var(--danger); }
+
+        table { width: 100%; border-collapse: collapse; font-size: 15px; color: var(--text-main); }
+        th, td { border: 1px solid var(--glass-border); padding: 12px 15px; text-align: right; }
+        th { background: var(--table-header); font-weight: 700; }
+        tr:hover td { background: var(--table-hover); }
+
+        .d-flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+        /* تنسيقات الطباعة (PDF) */
+        .pdf-mode { background: #ffffff !important; color: #000000 !important; border: none; box-shadow: none; }
+        .pdf-mode table { color: #000000 !important; border-color: #cbd5e1 !important; }
+        .pdf-mode th, .pdf-mode td { border-color: #cbd5e1 !important; }
+        .pdf-mode th { background: #f1f5f9 !important; }
+        .print-header { display: none; text-align: center; margin-bottom: 20px; border-bottom: 2px solid #1E3A8A; padding-bottom: 15px; }
+        .print-header h2 { color: #1E3A8A; margin: 0; }
+        .pdf-mode .print-header { display: block; }
+        
+        /* تنسيق فلاتر التاريخ */
+        .date-filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--input-bg); padding: 10px 15px; border-radius: 8px; border: 1px solid var(--input-border); }
+        .date-filters label { margin: 0; font-size: 14px; }
+        .date-filters input { padding: 8px; font-size: 14px; }
+
+        /* ==========================================
+           تعديلات التجاوب مع الموبايل (Responsive CSS)
+           ========================================== */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .glass-panel { padding: 15px; }
+            
+            .top-bar { 
+                flex-direction: column; 
+                align-items: center; 
+                gap: 15px; 
+            }
+            .top-bar .spacer { display: none; } /* إخفاء المساحة الفارغة */
+            
+            .header h1 { font-size: 24px; }
+            
+            .dashboard-cards { 
+                grid-template-columns: 1fr 1fr; /* عرض كارتين في السطر */
+                gap: 10px; 
+            }
+            @media (max-width: 480px) {
+                .dashboard-cards { grid-template-columns: 1fr; } /* عرض كارت واحد للشاشات الصغيرة جداً */
+            }
+            
+            .form-grid { grid-template-columns: 1fr; }
+            
+            .d-flex-between { 
+                flex-direction: column; 
+                align-items: stretch; 
+                gap: 15px; 
+            }
+            
+            .date-filters { 
+                flex-direction: column; 
+                align-items: stretch; 
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .date-filters input, .date-filters button { 
+                width: 100%; 
+                margin-top: 5px;
+            }
+            
+            table { font-size: 13px; }
+            th, td { padding: 8px 10px; }
+            
+            .btn-action { 
+                display: block; 
+                width: 100%; 
+                margin-bottom: 5px; 
+                box-sizing: border-box;
+            }
+            .table-responsive {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="top-bar no-print">
+        <button class="theme-btn" id="themeToggleBtn" onclick="toggleTheme()"> وضع نهاري</button>
+        <div class="header">
+            <h1>نظام تمويل الإعلانات</h1>
+            <p>مخصص لحسابات شركة قمر الخليج للسياحة والسفر</p>
+        </div>
+        <div class="spacer" style="width: 100px;"></div>
+    </div>
+
+    <div class="dashboard-cards glass-panel no-print">
+        <div class="card">
+            <h3>إجمالي المبالغ الواصلة</h3>
+            <div class="amount" id="totalReceived">$0.00</div>
+        </div>
+        <div class="card">
+            <h3>إجمالي المصروف الفعلي</h3>
+            <div class="amount" id="totalSpent">$0.00</div>
+        </div>
+        <div class="card accent">
+            <h3>إجمالي العمولات (15%)</h3>
+            <div class="amount" id="totalCommission">$0.00</div>
+        </div>
+        <div class="card">
+            <h3>العمولة المطلوبة</h3>
+            <div class="amount" id="finalBalance" style="direction: ltr;">$0.00</div>
+        </div>
+    </div>
+
+    <div class="glass-panel no-print">
+        <input type="hidden" id="editId" value="">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>اسم الحملة / الإعلان / التسديد</label>
+                <input type="text" id="campaignName" placeholder="">
+            </div>
+            <div class="form-group">
+                <label>التاريخ</label>
+                <input type="date" id="date">
+            </div>
+            <div class="form-group">
+                <label>المبلغ الواصل ($)</label>
+                <input type="number" id="received" placeholder="الدفعة المستلمة" min="0">
+            </div>
+            <div class="form-group">
+                <label>المصروف على الإعلان ($)</label>
+                <input type="number" id="spent" placeholder="المبلغ المصروف" min="0">
+            </div>
+        </div>
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="isSettlement" onchange="toggleSettlement()">
+            <label for="isSettlement">استلام عمولة المصروف)</label>
+        </div>
+
+        <button class="btn btn-primary" id="saveBtn" onclick="saveRecord()"> حفظ العملية في السجل</button>
+    </div>
+
+    <div id="printArea" class="glass-panel">
+        <div class="print-header">
+            <h2>شركة قمر الخليج للسياحة والسفر</h2>
+            <p>كشف حساب تمويل الحملات الإعلانية</p>
+            <p id="printDate" style="color: #64748b; font-size: 14px; font-weight: bold;"></p>
+        </div>
+
+        <div class="d-flex-between no-print" style="margin-bottom: 20px;">
+            <h3 style="margin: 0; font-size: 20px;">سجل العمليات التفصيلي</h3>
+            
+            <div class="date-filters">
+                <label>من تاريخ:</label>
+                <input type="date" id="filterStartDate">
+                <label>إلى تاريخ:</label>
+                <input type="date" id="filterEndDate">
+                <button class="btn btn-export" onclick="exportPDF()" style="margin: 0;"> سحب كشف PDF</button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>اسم الحملة / التفاصيل</th>
+                        <th>التاريخ</th>
+                        <th>الواصل</th>
+                        <th>المصروف</th>
+                        <th>العمولة (15%)</th>
+                        <th>الإجمالي المطلوب</th>
+                        <th>الرصيد</th>
+                        <th class="no-print">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="8" style="text-align: center;">جاري الاتصال بقاعدة البيانات...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // 0. نظام الوضع الليلي والنهاري (Theme Toggle)
+    // ==========================================
+    const themeBtn = document.getElementById('themeToggleBtn');
+    
+    if(localStorage.getItem('theme') === 'light') {
+        document.body.classList.add('light-mode');
+        themeBtn.innerHTML = ' وضع ليلي';
+    }
+
+    function toggleTheme() {
+        document.body.classList.toggle('light-mode');
+        const isLight = document.body.classList.contains('light-mode');
+        
+        localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        themeBtn.innerHTML = isLight ? ' وضع ليلي' : ' وضع نهاري';
+    }
+
+    // ==========================================
+    // 1. إعدادات Firebase الخاصة بيك
+    // ==========================================
+    const firebaseConfig = {
+        apiKey: "AIzaSyAK1LNWCQ0PYRGqHbDA-bE7GFFff_csaXE",
+        authDomain: "adspay-a0a18.firebaseapp.com",
+        projectId: "adspay-a0a18",
+        storageBucket: "adspay-a0a18.firebasestorage.app",
+        messagingSenderId: "847559498634",
+        appId: "1:847559498634:web:c521a04375fff009bbc673",
+        measurementId: "G-X69DF0T0TD"
+    };
+
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+    const COMMISSION_RATE = 0.15;
+
+    document.getElementById('date').valueAsDate = new Date();
+
+    // ==========================================
+    // التحكم بخيار "التسديد / استلام العمولة"
+    // ==========================================
+    function toggleSettlement() {
+        const isChecked = document.getElementById('isSettlement').checked;
+        const spentInput = document.getElementById('spent');
+        const campaignInput = document.getElementById('campaignName');
+
+        if (isChecked) {
+            spentInput.value = '';
+            spentInput.disabled = true;
+            campaignInput.placeholder = "   ";
+        } else {
+            spentInput.disabled = false;
+            campaignInput.placeholder = "";
+        }
+    }
+
+    // ==========================================
+    // 2. جلب وعرض البيانات (Real-time)
+    // ==========================================
+    db.collection("qamar_ads").orderBy("createdAt", "desc").onSnapshot((querySnapshot) => {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        
+        let sumReceived = 0, sumSpent = 0, sumCommission = 0, sumTotalCost = 0;
+
+        if (querySnapshot.empty) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">لا توجد عمليات حالياً. ابدأ بإضافة حملة جديدة!</td></tr>';
+        }
+
+        querySnapshot.forEach((doc) => {
+            const record = doc.data();
+            const id = doc.id;
+
+            sumReceived += parseFloat(record.received);
+            sumSpent += parseFloat(record.spent);
+            sumCommission += parseFloat(record.commission);
+            sumTotalCost += parseFloat(record.totalCost);
+
+            let balanceText = '';
+            if (record.balance > 0) {
+                balanceText = `<span style="color: #10B981; font-weight: bold;">+$${record.balance}</span>`;
+            } else if (record.balance < 0) {
+                balanceText = `<span style="color: #EF4444; font-weight: bold;">-$${Math.abs(record.balance)}</span>`;
+            } else {
+                balanceText = `<span>$0.00</span>`;
+            }
+
+            // تمييز اسم العملية إذا كانت تسديد
+            let nameDisplay = record.isSettlement 
+                ? `<span style="color: var(--success);">🔄 ${record.campaignName} (تسديد/عمولة)</span>` 
+                : record.campaignName;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="font-weight: bold;">${nameDisplay}</td>
+                <td>${record.date}</td>
+                <td>$${record.received}</td>
+                <td>$${record.spent}</td>
+                <td style="color: #F59E0B; font-weight: bold;">$${record.commission}</td>
+                <td style="font-weight: bold;">$${record.totalCost}</td>
+                <td dir="ltr">${balanceText}</td>
+                <td class="no-print">
+                    <button class="btn btn-action btn-edit" onclick="editRecord('${id}', '${record.campaignName}', '${record.date}', ${record.received}, ${record.spent}, ${record.isSettlement || false})">تعديل</button>
+                    <button class="btn btn-action btn-danger" onclick="deleteRecord('${id}')">حذف</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        updateDashboard(sumReceived, sumSpent, sumCommission, sumTotalCost);
+    });
+
+    function updateDashboard(received, spent, commission, totalCost) {
+        let finalBalance = received - totalCost;
+
+        document.getElementById('totalReceived').innerText = `$${received.toFixed(2)}`;
+        document.getElementById('totalSpent').innerText = `$${spent.toFixed(2)}`;
+        document.getElementById('totalCommission').innerText = `$${commission.toFixed(2)}`;
+        
+        let balanceEl = document.getElementById('finalBalance');
+        if(finalBalance > 0) {
+            balanceEl.innerText = `متبقي للشركة: $${finalBalance.toFixed(2)}`;
+            balanceEl.style.color = 'var(--success)';
+        } else if (finalBalance < 0) {
+            balanceEl.innerText = ` $${Math.abs(finalBalance).toFixed(2)}`;
+            balanceEl.style.color = 'var(--danger)';
+        } else {
+            balanceEl.innerText = `$0.00`;
+            balanceEl.style.color = 'var(--text-main)';
+        }
+    }
+
+    // ==========================================
+    // 3. إضافة أو تعديل عملية
+    // ==========================================
+    function saveRecord() {
+        const editId = document.getElementById('editId').value;
+        const campaignName = document.getElementById('campaignName').value || 'حملة بدون اسم';
+        const date = document.getElementById('date').value;
+        const received = parseFloat(document.getElementById('received').value) || 0;
+        
+        const isSettlement = document.getElementById('isSettlement').checked;
+        const spent = isSettlement ? 0 : (parseFloat(document.getElementById('spent').value) || 0);
+
+        if(spent === 0 && received === 0) {
+            alert('أكتب مبلغ واصل أو مصروف حتى تنحسب العملية!');
+            return;
+        }
+
+        const commission = spent * COMMISSION_RATE;
+        const totalCost = spent + commission; 
+        const balance = received - totalCost; 
+
+        const recordData = {
+            campaignName,
+            date,
+            received: received.toFixed(2),
+            spent: spent.toFixed(2),
+            commission: commission.toFixed(2),
+            totalCost: totalCost.toFixed(2),
+            balance: balance.toFixed(2),
+            isSettlement: isSettlement,
+            createdAt: editId ? undefined : firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        const btn = document.getElementById('saveBtn');
+        btn.innerHTML = ' جاري الحفظ...';
+
+        if (editId) {
+            db.collection("qamar_ads").doc(editId).update(recordData).then(() => resetForm());
+        } else {
+            db.collection("qamar_ads").add(recordData).then(() => resetForm());
+        }
+    }
+
+    function editRecord(id, name, date, received, spent, isSettlement) {
+        document.getElementById('editId').value = id;
+        document.getElementById('campaignName').value = name;
+        document.getElementById('date').value = date;
+        document.getElementById('received').value = received;
+        
+        const settlementCheckbox = document.getElementById('isSettlement');
+        settlementCheckbox.checked = isSettlement;
+        toggleSettlement();
+
+        if (!isSettlement) {
+            document.getElementById('spent').value = spent;
+        }
+        
+        const btn = document.getElementById('saveBtn');
+        btn.innerHTML = ' حفظ التعديلات';
+        btn.style.background = '#F59E0B';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetForm() {
+        document.getElementById('editId').value = '';
+        document.getElementById('campaignName').value = '';
+        document.getElementById('received').value = '';
+        document.getElementById('spent').value = '';
+        
+        document.getElementById('isSettlement').checked = false;
+        toggleSettlement();
+
+        const btn = document.getElementById('saveBtn');
+        btn.innerHTML = ' حفظ العملية في السجل';
+        btn.style.background = 'var(--primary-btn)';
+    }
+
+    function deleteRecord(id) {
+        if(confirm('متأكد تريد تحذف هاي العملية من قاعدة البيانات؟')) {
+            db.collection("qamar_ads").doc(id).delete();
+        }
+    }
+
+    // ==========================================
+    // 4. سحب كشف PDF (مع فلترة التاريخ)
+    // ==========================================
+    function exportPDF() {
+        const printArea = document.getElementById('printArea');
+        const noPrintElements = document.querySelectorAll('.no-print');
+        const rows = document.querySelectorAll('#tableBody tr');
+        
+        const startDate = document.getElementById('filterStartDate').value;
+        const endDate = document.getElementById('filterEndDate').value;
+
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            if(row.cells.length < 2) return; 
+            
+            const rowDate = row.cells[1].innerText;
+            let showRow = true;
+
+            if (startDate && rowDate < startDate) showRow = false;
+            if (endDate && rowDate > endDate) showRow = false;
+            
+            if (showRow) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none'; 
+            }
+        });
+
+        if(visibleCount === 0 && rows.length > 0 && rows[0].cells.length > 1) {
+            alert('ماكو أي عمليات ضمن هذا التاريخ!');
+            rows.forEach(row => row.style.display = ''); 
+            return;
+        }
+
+        let dateText = `تاريخ سحب الكشف: ${new Date().toLocaleDateString('ar-IQ')}`;
+        if (startDate || endDate) {
+            dateText += ` | للفترة من: ${startDate ? startDate : 'البداية'} إلى: ${endDate ? endDate : 'النهاية'}`;
+        }
+        document.getElementById('printDate').innerText = dateText;
+
+        noPrintElements.forEach(el => el.style.display = 'none');
+        
+        printArea.classList.remove('glass-panel');
+        printArea.classList.add('pdf-mode');
+
+        const opt = {
+            margin:       0.3,
+            filename:     'كشف_حساب_إعلانات_قمر_الخليج.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, backgroundColor: '#ffffff' },
+            jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
+        };
+
+        html2pdf().set(opt).from(printArea).save().then(() => {
+            noPrintElements.forEach(el => el.style.display = '');
+            printArea.classList.add('glass-panel');
+            printArea.classList.remove('pdf-mode');
+            rows.forEach(row => row.style.display = ''); 
+        });
+    }
+</script>
+
+</body>
+</html>
